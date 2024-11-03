@@ -6,16 +6,12 @@ out_dir=$2
 index_files=$3
 logfile=$4
 
-
 # defining the colors
-red="\033[0;31m"
-blue="\033[01;34m"
-bror="\033[0;33m"
-nc="\033[0m"
-
+highlight=$(docker run --rm rnaseq-basic:1 get_color.py pink)
+nc=$(docker run --rm rnaseq-basic:1 get_color.py nc)
 
 print_log() {
-        echo -e [$(date '+%D %H:%M:%S')] [${blue}hisat2_alignment${nc}] $1 | tee -a $logfile
+        echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2_alignment${nc}] $1 | tee -a $logfile
 }
 
 
@@ -35,13 +31,15 @@ for r1 in ${in_dir}/*R1.fastq.gz; do
 			-p 8 \
 			-x $index \
 			-1 $r1 \
-			-2 $r2 | samtools view -@ 8 -ShbF 4 - | samtools sort -O bam -o ${out_dir}/temp_${index:(-1)}.bam -
+			-2 $r2 2>/dev/null \
+			| samtools view -@ 8 -ShbF 4 - 2>/dev/null \
+			| samtools sort -O bam -o ${out_dir}/temp_${index:(-1)}.bam - 2>/dev/null
 	done
 
 	# merging all the temp bams
-	samtools merge -o ${out_prefix}.bam -@ 8 ${out_dir}/temp*bam 
+	samtools merge -o ${out_prefix}.bam -@ 8 ${out_dir}/temp*bam 2>/dev/null
 	rm ${out_dir}/temp*bam
 
         et=$(date '+%s')
-        print_log "BAM file ready for $(basename $out_prefix). Runtime: $((et - st)) s"
+        print_log "BAM file ready for sample $(basename $out_prefix). Runtime: $((et - st)) s"
 done

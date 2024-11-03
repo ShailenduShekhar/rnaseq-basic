@@ -1,33 +1,43 @@
 #!/usr/bin/env bash
 
-fastq_files_path=$1
-out_path=$2
+in_dir=$1
+out_dir=$2
+cpu=$3
+logfile=$4
 
-if [[ -z $out_path ]]; then
-	echo No Output Path provided.
-	echo Please provide an output path
-	exit 1
-fi
+# defining the colors
+highlight=$(get_color.py pink)
+nc=$(get_color.py nc)
 
-echo Processing FASTQ files through FASTP
-echo Run time logs are saved to ${out_path}/fastp_run_time.log
+print_log() {
+        echo -e [$(date '+%D %H:%M:%S')] [${highlight}Fastp${nc}] $1 | tee -a $logfile
+}
 
+print_log "Running FASTP with $cpu threads ..."
+fastp_out=${out_dir}/fastp_results
+mkdir -p $fastp_out
 
-for r1 in $fastq_files_path/*R1.fastq.gz; do 
+for r1 in $in_dir/*R1.fastq.gz; do
 	st=$(date '+%s')
 
-	r2=$(echo $r1 | sed 's/R1.fastq.gz/R2.fastq.gz/') 
-	out_prefix=${out_path}/$(basename $r1 | sed 's/_R1.fastq.gz//')
+	r2=$(echo $r1 | sed 's/R1.fastq.gz/R2.fastq.gz/')
+	out_prefix=${fastp_out}/$(basename $r1 | sed 's/_R1.fastq.gz//')
 
-	/mnt/e/softwares/fastp \
+	fastp \
 		-i $r1 \
 		-I $r2 \
-		-o ${out_prefix}_R1_trimmed.fastq.gz \
-		-O ${out_prefix}_R2_trimmed.fastq.gz \
-		-w 12 \
+		-o ${out_prefix}_trimmed_R1.fastq.gz \
+		-O ${out_prefix}_trimmed_R2.fastq.gz \
+		-w $cpu \
 		-h ${out_prefix}_report.html \
-		-j ${out_prefix}_report.json > /dev/null 2>&1
+		-j ${out_prefix}_report.json > ${out_prefix}_fastp_stdout.txt 2>&1
 
 	et=$(date '+%s')
-	echo FASTQ:$(realpath $out_prefix);Time Elapsed:$((et - st)) seconds >> ${out_path}/fastp_run_time.log
+
+	fastp_exit_code=$?
+	if [[ $fastp_exit_code -eq 0 ]]; then
+		print_log "Fastp complete for sample $(basename $out_prefix). Runtime: $((et - st)) s"
+	else
+		print_log "Fastp unsuccessful for sample $(basename $out_prefix). Check ${out_prefix}_fastp_stdout.txt."
+	fi
 done

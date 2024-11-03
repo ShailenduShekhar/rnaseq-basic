@@ -9,14 +9,12 @@ logfile=$5
 
 
 # defining the colors
-red="\033[0;31m"
-blue="\033[01;34m"
-bror="\033[0;33m"
-nc="\033[0m"
+highlight=$(docker run --rm rnaseq-basic:1 get_color.py pink)
+nc=$(docker run --rm rnaseq-basic:1 get_color.py nc)
 
 
 print_log() {
-	echo -e [$(date '+%D %H:%M:%S')] [${blue}hisat2_index_build${nc}] $1 | tee -a $logfile
+	echo -e [$(date '+%D %H:%M:%S')] [${pink}hisat2_index_build${nc}] $1 | tee -a $logfile
 }
 
 for fasta in ${input_dir}/*fa; do
