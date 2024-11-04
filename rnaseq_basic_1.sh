@@ -2,7 +2,6 @@
 
 
 # options that cannot be changed at execution time
-logfile=$(pwd)/rnaseq_basic.log
 cpu=$(nproc)
 ram_factor=54
 
@@ -31,6 +30,7 @@ USAGE:
 	-r (*): Reference FASTA sequence (*.fa or *.fasta)
 	-g    : GTF file (If provided, enables annotation of the HISAT2 index building by default)
 	-f    : Enables FASTP (default: disabled)
+	-l (*): Log file
 	"""
 }
 
@@ -184,6 +184,10 @@ while getopts "hi:o:fr:g:q" option; do
 		annotation=true
 		;;
 
+		l)
+		logfile=$(realpath $OPTARG)
+		;;
+
 		h) help
 		exit 0;;
 
@@ -198,6 +202,7 @@ done
 check_null_dir_exists "$in_dir" "-i" "Input Directory"
 check_null_value "$out_dir" "-o" "Output Directory"
 check_null_file_exists "$ref" "-r" "Reference"
+check_null_value "$logfile" "-l" "Log file"
 
 [[ "$annotation" == true ]] && {
 	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
@@ -292,7 +297,7 @@ else
 	st=$(date '+%s')
 
 	docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
-		run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$logfile"
+		run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$cpu" "$logfile"
 
 	et=$(date '+%s')
 	hisat2_alignment_ec=$?

@@ -22,7 +22,7 @@ def prepare_df(df):
     # renaming the columns
     print("Renaming columns ...")
     for col in df.columns:
-        df.rename(columns = {col : re.sub(r"_(?!.*_).*", "", os.path.basename(col))}, inplace = True)
+        df.rename(columns = {col : re.sub(r".bam", "", os.path.basename(col))}, inplace = True)
 
     # getting rid of unwanted columns
     print("Filtering out unnecessary columns from the featureCounts output ...")

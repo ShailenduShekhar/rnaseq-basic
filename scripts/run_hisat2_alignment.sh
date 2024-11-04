@@ -4,7 +4,8 @@
 in_dir=$1
 out_dir=$2
 index_files=$3
-logfile=$4
+cpu=$4
+logfile=$5
 
 # defining the colors
 highlight=$(get_color.py pink)
@@ -28,10 +29,10 @@ for r1 in ${in_dir}/*R1.fastq.gz; do
 	for index in $(ls ${index_files}/*.1.ht2 | sed 's/.1.ht2//'); do
 		hisat2 \
 			--summary-file ${out_prefix}_index${index:(-1)}_summary.txt \
-			-p 8 \
-			-x $index \
-			-1 $r1 \
-			-2 $r2 2>/dev/null \
+			-p "$cpu" \
+			-x "$index" \
+			-1 "$r1" \
+			-2 "$r2" 2>/dev/null \
 			| samtools view -@ 8 -ShbF 4 - 2>/dev/null \
 			| samtools sort -O bam -o ${out_dir}/temp_${index:(-1)}.bam - 2>/dev/null
 	done
