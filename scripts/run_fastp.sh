@@ -8,6 +8,8 @@ logfile=$4
 # defining the colors
 highlight=$(get_color.py pink)
 nc=$(get_color.py nc)
+green=$(get_color.py green)
+red=$(get_color.py red)
 
 print_log() {
         echo -e [$(date '+%D %H:%M:%S')] [${highlight}Fastp${nc}] $1 | tee -a $logfile
@@ -36,8 +38,8 @@ for r1 in $in_dir/*R1.fastq.gz; do
 
 	fastp_exit_code=$?
 	if [[ $fastp_exit_code -eq 0 ]]; then
-		print_log "Fastp complete for sample $(basename $out_prefix). Runtime: $((et - st)) s"
+		print_log "Fastp ${green}successful${nc} for sample $(basename $out_prefix). Runtime: $((et - st)) s"
 	else
-		print_log "Fastp unsuccessful for sample $(basename $out_prefix). Check ${out_prefix}_fastp_stdout.txt."
+		print_log "Fastp ${red}unsuccessful${nc} for sample $(basename $out_prefix). Check ${out_prefix}_fastp_stdout.txt."
 	fi
 done

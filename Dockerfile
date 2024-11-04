@@ -9,6 +9,8 @@ RUN apt-get update \
 	default-jre \
 	default-jdk \
 	wget \
+	curl \
+	unzip \
 	libncurses5-dev \
 	libbz2-dev \
 	liblzma-dev \
@@ -31,8 +33,14 @@ RUN apt-get update \
 	&& make install \
 	&& rm -rf /samtools-1.21*
 
+RUN curl -L -o hisat2-2.2.1.zip https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download \
+	&& unzip hisat2-2.2.1.zip \
+	&& mv hisat2-2.2.1 /apps/hisat2-2.2.1 \
+	&& rm -rf hisat2-2.2.1.zip
+
 COPY ./tools/ /apps/
 COPY ./scripts/ /scripts/
 
 ENV PATH=${PATH}:/py-mod/bin:/apps/:/apps/FastQC/:/apps/hisat2-2.2.1/:/apps/subread-2.0.7-Linux-x86_64:/scripts/:/apps/samtools-1.21/bin
 ENV PYTHONPATH=/py-mod/lib/python3.12/site-packages/
+ENV TZ="Asia/Kolkata"

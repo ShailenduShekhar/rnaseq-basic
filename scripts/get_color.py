@@ -8,7 +8,8 @@ colors = {
     "red":"\033[0;31m",
     "blue":"\033[01;34m",
     "brown-orange":"\033[0;33m",
-    "pink":"\033[0;35m"
+    "pink":"\033[0;35m",
+    "green": "\033[0;32m"
 }
 
 if len(sys.argv) > 1:

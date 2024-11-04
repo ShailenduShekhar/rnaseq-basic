@@ -11,7 +11,7 @@ highlight=$(docker run --rm rnaseq-basic:1 get_color.py pink)
 nc=$(docker run --rm rnaseq-basic:1 get_color.py nc)
 
 print_log() {
-        echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2_alignment${nc}] $1 | tee -a $logfile
+        echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2-alignment${nc}] $1 | tee -a $logfile
 }
 
 

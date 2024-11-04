@@ -9,7 +9,9 @@ ram_factor=54
 # defining the colors
 red=$(docker run --rm rnaseq-basic:1 get_color.py red)
 blue=$(docker run --rm rnaseq-basic:1 get_color.py blue)
+green=$(docker run --rm rnaseq-basic:1 get_color.py green)
 bror=$(docker run --rm rnaseq-basic:1 get_color.py brown-orange)
+pink=$(docker run --rm rnaseq-basic:1 get_color.py pink)
 nc=$(docker run --rm rnaseq-basic:1 get_color.py nc)
 
 
@@ -23,14 +25,12 @@ USAGE:
 
 (*): Required Argument
 
-	-i    : Input directory containing FASTQ files in the format - *R1/2.fastq.gz
+	-i (*): Input directory containing FASTQ files in the format - *R1/2.fastq.gz
 	-o (*): Output directory which would contain all the outputs produced by the analysis pipeline
 	-q    : Disables FASTQC and MultiQC (default: enabled)
-	-r    : Reference FASTA sequence (*.fa or *.fasta)
-	-a    : Enable building the reference index using the exon and split sites annotated information (default: disabled)
-	-g    : GTF file
-	-f    : Enable FASTP (default: disabled)
-		If enabled, FASTP would run with the default parameters. 
+	-r (*): Reference FASTA sequence (*.fa or *.fasta)
+	-g    : GTF file (If provided, enables annotation of the HISAT2 index building by default)
+	-f    : Enables FASTP (default: disabled)
 	"""
 }
 
@@ -101,7 +101,8 @@ run_qc() {
 
 	fastqc_ec=$?
 	et=$(date '+%s')
-	[[ $fastqc_ec -eq 0 ]] && print_log "FASTQC successful. Runtime: $((et - st)) s"
+	[[ $fastqc_ec -eq 0 ]] && print_log "FASTQC ${green}successful${nc}. Runtime: $((et - st)) s" \
+		|| print_log "FASTQC ${red}unsuccessful${nc}. Check ${fastqc_res}/fastqc_stdout.txt."
 
 	# running MultiQC
 	multiqc_res=${out_dir}/multiqc_results
@@ -114,39 +115,34 @@ run_qc() {
 	
 	multiqc_ec=$?
 	et=$(date '+%s')
-	[[ $multiqc_ec -eq 0 ]] && print_log "MultiQC successful. Runtime: $((et - st)) s"
+	[[ $multiqc_ec -eq 0 ]] && print_log "MultiQC ${green}successful${nc}. Runtime: $((et - st)) s" \
+		|| print_log "MultiQC ${red}unsuccessful${nc}. Check ${multiqc_res}/multiqc_stdout.txt."
 }
 
-extract_exons_splice_sites() {
-	print_log "Extracting the splice sites and exons from the GTF file ..."
+splitfasta() {
+	split_out=${out_dir}/split_ref_fasta
+	mkdir -p $split_out
 
-        gtf_input_dir=$(realpath $(dirname $gtf))
-	exon_ss_outdir=${out_dir}/annotation_files
-	mkdir -p $exon_ss_outdir
+	print_log "[${pink}splitFASTA${nc}] Splitting the FASTA Reference sequence ..."
 
-        ss=${exon_ss_outdir}/hisat2_splice_sites.txt
-        exon=${exon_ss_outdir}/hisat2_exons.txt
+	ref_input_dir=$(realpath $(dirname $ref))
+	st=$(date '+%s')
+	docker run --rm -v $ref_input_dir:$ref_input_dir -v $out_dir:$out_dir \
+		rnaseq-basic:1 split_fasta_sequence.py $ref $split_fa_size $split_out \
+		> $split_out/split_fasta_sequence_stdout.txt 2>&1
 
-        st=$(date '+%s')
+	split_fa_exit_code=$?
 
-        docker run --rm -v $gtf_input_dir:$gtf_input_dir -v $out_dir:$out_dir \
-                rnaseq-basic:1 hisat2_extract_splice_sites.py $gtf > $ss & ss_pid=$!
+	et=$(date '+%s')
 
-        docker run --rm -v $gtf_input_dir:$gtf_input_dir -v $out_dir:$out_dir \
-                rnaseq-basic:1 hisat2_extract_exons.py $gtf > $exon & exon_pid=$!
+	if [[ $split_fa_exit_code -eq 0 ]]; then
+		print_log "[${pink}splitFASTA${nc}] Splitting FASTA file successful. Runtime: $((et - st)) s"
+	else 
+		print_log "[${pink}splitFASTA${nc}] SSlitting FASTA file unsuccessful.\n Terminating the pipeline."
+		exit 1
+	fi
 
-        wait $ss_pid
-        ss_exit_code=$?
-        wait $exon_pid
-        exon_exit_code=$?
-
-        et=$(date '+%s')
-
-        if [[ $exon_exit_code -eq 0 && $ss_exit_code -eq 0 ]]; then
-                print_log "Split sites and exons SUCCESSFULLY extracted. Runtime: $((et - st)) s"
-        else
-                print_log "Split sites and exons extraction UNSUCCESSFULL. Runtime: $((et - st)) s"
-        fi
+	print_log "[${pink}splitFASTA${nc}] Original FASTA file was splitted into $(ls $split_out/*fa | wc -l) parts."
 }
 
 
@@ -203,14 +199,14 @@ check_null_dir_exists "$in_dir" "-i" "Input Directory"
 check_null_value "$out_dir" "-o" "Output Directory"
 check_null_file_exists "$ref" "-r" "Reference"
 
-[[ $q == true ]] && print_log "QC${blue} enabled${nc}" || print_log "QC${red} disabled${nc}"
-
-[[ $f == true ]] && print_log "FASTP${blue} enabled${nc}" ||  print_log "FASTP${red} disabled${nc}"
-
 [[ "$annotation" == true ]] && {
-	print_log "Annotation ${blue}enabled${nc} for HISAT2 index building"
+	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
 	check_null_file_exists "$gtf" "-g" "GTF"
-} || print_log "Annotation ${red}disabled${nc} for HISAT2 index building"
+} || print_log "Annotation for HISAT2 index building ${red}disabled${nc}"
+
+[[ $q == true ]] && print_log "QC${green} enabled${nc}" || print_log "QC${red} disabled${nc}"
+
+[[ $f == true ]] && print_log "FASTP${green} enabled${nc}" ||  print_log "FASTP${red} disabled${nc}"
 
 # executing QC
 [[ $q == true ]] && run_qc
@@ -224,7 +220,15 @@ check_null_file_exists "$ref" "-r" "Reference"
 
 # extracting exons and splice sites, if needed
 [[ $annotation == true ]] && { 
-	extract_exons_splice_sites
+	gtf_input_dir=$(realpath $(dirname $gtf))
+	exon_ss_outdir=${out_dir}/annotation_files
+	mkdir -p $exon_ss_outdir
+
+	ss=${exon_ss_outdir}/hisat2_splice_sites.txt
+	exon=${exon_ss_outdir}/hisat2_exons.txt
+
+	docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$exon_ss_outdir":"$exon_ss_outdir" \
+		rnaseq-basic:1 run_annotation_gtf.sh "$gtf" "$ss" "$exon" "$logfile"
 	annot_params="--ss ${ss} --exon ${exon}"
 }
 
@@ -251,88 +255,40 @@ if [[ $split_fa_size -gt $ref_size ]]; then
                 $ref \
 		${hisat_index}/$(basename $ref) > ${hisat_index}/hisat2_build_stdout.txt 2>&1
 
-        exit_code=$?
+        hisat_build_nosplit_ec=$?
         et=$(date '+%s')
+	[[ $hisat_build_nosplit_ec -eq 0 ]] && {
+		print_log "Reference Index is ready. Runtime: $((et - st))"
+	} || print_log "Reference index building was unsuccessful"
 else
 	print_log "Reference file splitting is needed."
-
-	split_out=${out_dir}/split_ref_fasta
-	mkdir -p $split_out
-
 	print_log "Available System RAM: $ram MiB"
 	print_log "Size of Split FASTA Reference: $split_fa_size MiB"
-	print_log "Splitting the FASTA Reference sequence ..."
-
-	ref_input_dir=$(realpath $(dirname $ref))
-	st=$(date '+%s')
-	docker run --rm -v $ref_input_dir:$ref_input_dir -v $out_dir:$out_dir \
-		rnaseq-basic:1 split_fasta_sequence.py $ref $split_fa_size $split_out \
-		> $split_out/split_fasta_sequence_stdout.txt 2>&1
-
-	split_fa_exit_code=$?
-
-	et=$(date '+%s')
-
-	if [[ $split_fa_exit_code -eq 0 ]]; then
-		print_log "Splitting FASTA file successful. Runtime: $((et - st)) s"
-	else 
-		print_log "Splitting FASTA file unsuccessful.\n Terminating the pipeline."
-		exit 1
-	fi
-
-	# generating the split sites and exons from the gtf file
-	print_log "Extracting the split sites and exons from the GTF file ..."
-
-	gtf_input_dir=$(realpath $(dirname $gtf))
-	ss=${split_out}/hisat2_splice_sites.txt
-	exon=${split_out}/hisat2_exons.txt
+	splitfasta
 	
-	st=$(date '+%s')
-
-	docker run --rm -v $gtf_input_dir:$gtf_input_dir -v $out_dir:$out_dir \
-		rnaseq-basic:1 hisat2_extract_splice_sites.py $gtf > $ss & ss_pid=$!
-
-	docker run --rm -v $gtf_input_dir:$gtf_input_dir -v $out_dir:$out_dir\
-		rnaseq-basic:1 hisat2_extract_exons.py $gtf > $exon & exon_pid=$!
-
-	wait $ss_pid
-	ss_exit_code=$?
-	wait $exon_pid
-	exon_exit_code=$?
-
-	et=$(date '+%s')
-
-	if [[ $exon_exit_code -eq 0 && $ss_exit_code -eq 0 ]]; then
-		print_log "Split sites and exons SUCCESSFULLY extracted. Runtime: $((et - st)) s"
-	else
-		print_log "Split sites and exons extraction UNSUCCESSFULL. Runtime: $((et - st)) s"
-	fi
-	
-	# running HISAT2-build for all the split reference sequence, if needed
+	# running HISAT2-build for all the split reference sequence
+	#print_log "[${pink}hisat2-build${nc}] Building HISAT2 index for Split FASTA ..."
 	hisat2_index_dir=${out_dir}/hisat2_split_ref_index
 	mkdir -p $hisat2_index_dir
 
 	st=$(date '+%s')
 
-	docker run --rm -v $out_dir:$out_dir rnaseq-basic:1 \
-		run_hisat2_build.sh $split_out $hisat2_index_dir $ss $exon $logfile
+	docker run --rm -v "$out_dir":"$out_dir" --cpus "$cpu" -m "23g" rnaseq-basic:1 \
+		run_hisat2_build.sh "$split_out" "$hisat2_index_dir" "$annot_params" "$logfile"
 
 	hisat2_index_exit_code=$?
 	et=$(date '+%s')
 
 	if [[ $hisat2_index_exit_code -eq 0 ]]; then
-		print_log "HISAT2 Index building SUCCESSFULL. Runtime: $((et - st)) s"
+		print_log "HISAT2 Index building ${green}successful${nc}. Runtime: $((et - st)) s"
 	else
-		print_log "HISAT2 Index building UNSUCCESSFULL. Runtime: $((et - st)) s"
+		print_log "HISAT2 Index building ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
 	fi
-	
+exit	
 	# hisat2 alignment, SAM to BAM conversion, filtering out unaligned reads, sorting BAM files, and merging BAM files of the same sample
 	hisat2_bam_dir=${out_dir}/hisat2_alignment_bams
 	mkdir -p $hisat2_bam_dir
 
-	# temp variables
-	hisat2_index_dir=/mnt/e/company_selection/biostate_ai/rnaseq-basic/trial_output/hisat2_split_ref_index
-
-	docker run --rm -v $in_dir:$in_dir -v $out_dir:$out_dir rnaseq-basic:1 \
-		run_hisat2_alignment.sh $in_dir $hisat2_bam_dir $hisat2_index_dir $logfile
+	docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
+		run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$logfile"
 fi
