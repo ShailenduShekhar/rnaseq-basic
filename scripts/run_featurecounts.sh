@@ -2,20 +2,23 @@
 
 
 input_dir=$1
-outfile=$2
+outdir=$2
 anot_file=$3
+cpu=$4
 
-echo Using featureCounts to quantify the BAM files ...
+# defining the colors
+highlight=$(get_color.py pink)
+nc=$(get_color.py nc)
 
-st=$(date '+%s')
+print_log() {
+        echo -e [$(date '+%D %H:%M:%S')] [${highlight}featureCounts${nc}] $1 | tee -a $logfile
+}
+
+print_log "Using featureCounts to quantify the BAM files ..."
 
 featureCounts \
 	-p --countReadPairs \
-	-T 8 \
-	-a $anot_file \
-	-o ${outfile} \
-	$(ls ${input_dir}/*bam | xargs) > /dev/null 2>&1
-
-et=$(date '+%s')
-
-echo "BAM files processed:$(ls ${input_dir}/*bam | wc);Runtime:$((et - st))"
+	-T "$cpu" \
+	-a "$anot_file" \
+	-o "$outdir"/all_bam_quant.txt \
+	$(ls ${input_dir}/*bam | xargs) > "$outdir"/featureCounts_stdout.txt 2>&1

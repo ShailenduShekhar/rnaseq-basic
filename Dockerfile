@@ -36,11 +36,21 @@ RUN apt-get update \
 RUN curl -L -o hisat2-2.2.1.zip https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download \
 	&& unzip hisat2-2.2.1.zip \
 	&& mv hisat2-2.2.1 /apps/hisat2-2.2.1 \
-	&& rm -rf hisat2-2.2.1.zip
+	&& rm -rf hisat2-2.2.1.zip \
+	&& wget http://opengene.org/fastp/fastp.0.23.4 \
+	&& mv fastp.0.23.4 /apps/fastp \
+	&& chmod a+x /apps/fastp \
+	&& wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.12.1.zip \
+	&& unzip fastqc_v0.12.1.zip \
+	&& mv FastQC /apps/ \
+	&& rm -rf fastqc_v0.12.1.zip \
+	&& wget https://github.com/ShiLab-Bioinformatics/subread/releases/download/2.0.2/subread-2.0.2-Linux-x86_64.tar.gz \
+	&& tar -xf subread-2.0.2-Linux-x86_64.tar.gz \
+	&& mv subread-2.0.2-Linux-x86_64 /apps/ \
+	&& rm subread-2.0.2-Linux-x86_64.tar.gz
 
-COPY ./tools/ /apps/
 COPY ./scripts/ /scripts/
 
-ENV PATH=${PATH}:/py-mod/bin:/apps/:/apps/FastQC/:/apps/hisat2-2.2.1/:/apps/subread-2.0.7-Linux-x86_64:/scripts/:/apps/samtools-1.21/bin
+ENV PATH=${PATH}:/py-mod/bin:/apps/:/apps/FastQC/:/apps/hisat2-2.2.1/:/apps/subread-2.0.2-Linux-x86_64/bin:/scripts/:/apps/samtools-1.21/bin
 ENV PYTHONPATH=/py-mod/lib/python3.12/site-packages/
 ENV TZ="Asia/Kolkata"

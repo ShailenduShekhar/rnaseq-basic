@@ -13,7 +13,7 @@ red=$(get_color.py red)
 nc=$(get_color.py nc)
 
 print_log() {
-	echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2_index_build${nc}] $1 | tee -a $logfile
+	echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2-index-build${nc}] $1 | tee -a $logfile
 }
 
 for fasta in ${input_dir}/*fa; do
