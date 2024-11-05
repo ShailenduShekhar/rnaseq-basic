@@ -26,7 +26,7 @@ for r1 in ${in_dir}/*R1.fastq.gz; do
 	print_log "Processing sample $(basename $out_prefix) ..."
 
 	# iterating through each split Index file
-	for index in $(ls ${index_files}/*.1.ht2 | sed 's/.1.ht2//'); do
+	for index in $(ls ${index_files}/*.1.ht2 | sed 's/.1.ht2$//'); do
 		hisat2 \
 			--summary-file ${out_prefix}_index${index:(-1)}_summary.txt \
 			-p "$cpu" \

@@ -26,9 +26,10 @@ USAGE:
 
 	-i (*): Input directory containing FASTQ files in the format - *R1/2.fastq.gz
 	-o (*): Output directory which would contain all the outputs produced by the analysis pipeline
+	-x    : HISAT2 index (if provided skips the HISAT2 index building step) (Mutually exclusive with 'g')
 	-q    : Disables FASTQC and MultiQC (default: enabled)
 	-r (*): Reference FASTA sequence (*.fa or *.fasta)
-	-g    : GTF file (If provided, enables annotation of the HISAT2 index building by default)
+	-g    : GTF file (Enables annotation of the HISAT2 Index) (Mutually exclusive with 'x')
 	-f    : Enables FASTP (default: disabled)
 	-l (*): Log file
 	"""
@@ -39,14 +40,7 @@ print_log() {
 }
 
 print_error() {
-	echo -e [$(date '+%D %H:%M:%S')] "$1"
-}
-
-check_dir_exists() {
-	if [[ ! -d $1 ]]; then
-		print_error "${bror}Directory${nc} ${red}"$1"${nc} does not exist. Terminating the pipeline."
-		exit 1
-	fi
+	echo -e [$(date '+%D %H:%M:%S')] [${red}ERROR${nc}] "$1"
 }
 
 check_null_dir_exists() {
@@ -73,19 +67,19 @@ check_null_file_exists() {
 	print_log "${blue}${3}${nc} : ${1}"
 }
 
-check_file_exists() {
-	if [[ ! -f $1 ]]; then
-		print_error "${bror}File${nc} ${red}"$1"${nc} does not exist. Terminating the pipeline."
-		exit 1
-	fi
-}
-
 check_null_value() {
 	if [[ -z $1 ]]; then
 		print_error "A required parameter ${red}"$2"${nc} found empty.Check help with '-h'."
 		exit 1
 	fi
 	print_log "${blue}${3}${nc} : ${1}"
+}
+
+check_fasta_file() {
+	if [[ ! "$1" =~ \.fa$ && ! "$1" =~ \.fasta$ ]]; then
+		print_error "Reference provided is ${red}not${nc} a FASTA file (*.fa or *.fasta)"
+		exit 1
+	fi
 }
 
 run_qc() {
@@ -119,6 +113,29 @@ run_qc() {
 		|| print_log "MultiQC ${red}unsuccessful${nc}. Check ${multiqc_res}/multiqc_stdout.txt."
 }
 
+run_fastp() {
+	fastp_out=${out_dir}/fastp_results
+        mkdir -p "$fastp_out"
+
+        docker run --rm -v "$in_dir":"$in_dir" -v "$fastp_out":"$fastp_out" rnaseq-basic:1 \
+                run_fastp.sh "$in_dir" "$fastp_out" "$cpu" "$logfile"
+
+        in_dir="$fastp_out"
+}
+
+annotate() {
+	gtf_input_dir=$(realpath $(dirname $gtf))
+        exon_ss_outdir=${out_dir}/annotation_files
+        mkdir -p $exon_ss_outdir
+
+        ss=${exon_ss_outdir}/hisat2_splice_sites.txt
+        exon=${exon_ss_outdir}/hisat2_exons.txt
+
+        docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$exon_ss_outdir":"$exon_ss_outdir" \
+                rnaseq-basic:1 run_annotation_gtf.sh "$gtf" "$ss" "$exon" "$logfile"
+        annot_params="--ss ${ss} --exon ${exon}"
+}
+
 splitfasta() {
 	split_out=${out_dir}/split_ref_fasta
 	mkdir -p $split_out
@@ -145,6 +162,25 @@ splitfasta() {
 	print_log "[${pink}splitFASTA${nc}] Original FASTA file was splitted into $(ls $split_out/*fa | wc -l) parts."
 }
 
+build_split_index() {
+	hisat2_index_dir=${out_dir}/hisat2_index
+	mkdir -p $hisat2_index_dir
+
+	st=$(date '+%s')
+
+	docker run --rm -v "$out_dir":"$out_dir" rnaseq-basic:1 \
+		run_hisat2_build.sh "$split_out" "$hisat2_index_dir" "$annot_params" "$logfile"
+
+	hisat2_index_exit_code=$?
+	et=$(date '+%s')
+
+	if [[ $hisat2_index_exit_code -eq 0 ]]; then
+		print_log "[${pink}hisat2-index-build${nc}] HISAT2 Index building ${green}successful${nc}. Runtime: $((et - st)) s"
+	else
+		print_log "[${pink}hisat2-index-build${nc}] HISAT2 Index building ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
+	fi
+}
+
 
 if [[ $# -eq 0 ]]; then
 	echo -e "No arguments detected.\nTerminating the pipeline."
@@ -155,9 +191,8 @@ fi
 # setting the default options
 q=true
 f=false
-annotation=false
 
-while getopts "hi:o:fr:g:q" option; do
+while getopts "hi:o:fr:g:ql:x:" option; do
 	case $option in
 		i)
 		in_dir=$(realpath $OPTARG)
@@ -181,11 +216,14 @@ while getopts "hi:o:fr:g:q" option; do
 
 		g)
 		gtf=$(realpath $OPTARG)
-		annotation=true
 		;;
 
 		l)
 		logfile=$(realpath $OPTARG)
+		;;
+
+		x)
+		index=$(realpath $OPTARG)
 		;;
 
 		h) help
@@ -202,12 +240,25 @@ done
 check_null_dir_exists "$in_dir" "-i" "Input Directory"
 check_null_value "$out_dir" "-o" "Output Directory"
 check_null_file_exists "$ref" "-r" "Reference"
+check_fasta_file "$ref"
 check_null_value "$logfile" "-l" "Log file"
 
-[[ "$annotation" == true ]] && {
-	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
+[[ ! -z "$gtf" && ! -z "$index" ]] && {
+	print_error "Options 'g' and 'x' are mutually exclusive. Terminating the pipeline."
+	exit 1
+}
+
+[[ ! -z "$gtf" ]] && {
 	check_null_file_exists "$gtf" "-g" "GTF"
+	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
 } || print_log "Annotation for HISAT2 index building ${red}disabled${nc}"
+
+[[ ! -z "$index" ]] && {
+	check_null_dir_exists "$index" "-x" "Index"
+	print_log "HISAT2 Index building stage will be skipped."
+	hisat2_index_dir="$index"
+	index_mount="-v $index:$index"
+}
 
 [[ $q == true ]] && print_log "QC${green} enabled${nc}" || print_log "QC${red} disabled${nc}"
 
@@ -217,112 +268,78 @@ check_null_value "$logfile" "-l" "Log file"
 [[ $q == true ]] && run_qc
 
 # executing Fastp
-[[ $f == true ]] && {
-	print_log "Running FASTP ..."
-	docker run --rm -v $in_dir:$in_dir -v $out_dir:$out_dir rnaseq-basic:1 \
-		run_fastp.sh $in_dir $out_dir $cpu $logfile
-}
+[[ $f == true ]] && run_fastp
 
 # extracting exons and splice sites, if needed
-[[ $annotation == true ]] && { 
-	gtf_input_dir=$(realpath $(dirname $gtf))
-	exon_ss_outdir=${out_dir}/annotation_files
-	mkdir -p $exon_ss_outdir
-
-	ss=${exon_ss_outdir}/hisat2_splice_sites.txt
-	exon=${exon_ss_outdir}/hisat2_exons.txt
-
-	docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$exon_ss_outdir":"$exon_ss_outdir" \
-		rnaseq-basic:1 run_annotation_gtf.sh "$gtf" "$ss" "$exon" "$logfile"
-	annot_params="--ss ${ss} --exon ${exon}"
-}
+[[ ! -z $gtf ]] && annotate
 
 # Splitting the reference sequence, if needed
-print_log "Preparing for HISAT2 index building ..."
+[[ -z $index ]] && {
+	print_log "Preparing for HISAT2 index building ..."
 
-ram=$(free -m | grep "Mem" | sed 's/ \+/\t/g' | cut -f 2)
-split_fa_size=$(($ram / $ram_factor))
-ref_size=$(($(du -b $ref | cut -f1) / (1024 * 1024)))
+	ram=$(free -m | grep "Mem" | sed 's/ \+/\t/g' | cut -f 2)
+	split_fa_size=$(($ram / $ram_factor))
+	ref_size=$(($(du -b $ref | cut -f1) / (1024 * 1024)))
+	split_check=false
 
+	[[ $ref_size -gt $split_fa_size ]] && {
+		print_log "Reference file splitting is needed."
+		print_log "Available System RAM: $ram MiB"
+		print_log "Size of Split FASTA Reference: $split_fa_size MiB"
+		splitfasta
 
-if [[ $split_fa_size -gt $ref_size ]]; then
-	print_log "Reference file splitting is NOT needed. Directly proceeding to HISAT2 index building ..."
+		build_split_index
+	} || {
+		print_log "Reference file splitting is NOT needed. Directly proceeding to HISAT2 index building ..."
+		hisat2_index_dir=${out_dir}/hisat2_index
+		mkdir -p "$hisat2_index_dir"
 
-	ref_dir=$(realpath $(dirname $ref))
-	hisat_index=${out_dir}/hisat2_index
-	mkdir -p $hisat_index
+		st=$(date '+%s')
+		hisat2-build ${annot_params} \
+			-p 1 \
+			"$ref" \
+			${hisat2_index_dir}/$(basename $ref) > ${hisat2_index_dir}/hisat2_index_build_stdout.txt 2>&1
 
-	st=$(date '+%s')
+		hisat_build_nosplit_ec=$?
+		et=$(date '+%s')
 
-	docker run --rm -v $ref_dir:$ref_dir -v $out_dir:$out_dir rnaseq-basic:1 \
-		hisat2-build $annot_params \
-                -p 1 \
-                $ref \
-		${hisat_index}/$(basename $ref) > ${hisat_index}/hisat2_build_stdout.txt 2>&1
+		[[ $hisat_build_nosplit_ec -eq 0 ]] && {
+			print_log "Reference Index is ready. Runtime: $((et - st))"
+		} || print_log "Reference index building was unsuccessful"
+	}
+}
 
-        hisat_build_nosplit_ec=$?
-        et=$(date '+%s')
-	[[ $hisat_build_nosplit_ec -eq 0 ]] && {
-		print_log "Reference Index is ready. Runtime: $((et - st))"
-	} || print_log "Reference index building was unsuccessful"
+# hisat2 alignment, SAM to BAM conversion, filtering out unaligned reads, sorting BAM files, and merging BAM files of the same sample
+hisat2_bam_dir=${out_dir}/hisat2_alignment_bams
+mkdir -p $hisat2_bam_dir
+
+st=$(date '+%s')
+
+docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" ${index_mount} rnaseq-basic:1 \
+	run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$cpu" "$logfile"
+
+et=$(date '+%s')
+hisat2_alignment_ec=$?
+
+if [[ "$hisat2_alignment_ec" -eq 0 ]]; then
+	print_log "[${pink}hisat2-alignment${nc}] HISAT2 Alignment ${green}successful${nc}. Runtime: $((et - st)) s"
 else
-	print_log "Reference file splitting is needed."
-	print_log "Available System RAM: $ram MiB"
-	print_log "Size of Split FASTA Reference: $split_fa_size MiB"
-	splitfasta
-	
-	# running HISAT2-build for all the split reference sequence
-	#print_log "[${pink}hisat2-build${nc}] Building HISAT2 index for Split FASTA ..."
-	hisat2_index_dir=${out_dir}/hisat2_split_ref_index
-	mkdir -p $hisat2_index_dir
+	print_log "[${pink}hisat2-alignment${nc}] HISAT2 Alignment ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
+fi
 
-	st=$(date '+%s')
+# BAM file quantification using featureCounts tool
+quants=${out_dir}/quants_data
+mkdir -p "$quants"
 
-	docker run --rm -v "$out_dir":"$out_dir" --cpus "$cpu" -m "23g" rnaseq-basic:1 \
-		run_hisat2_build.sh "$split_out" "$hisat2_index_dir" "$annot_params" "$logfile"
+st=$(date '+%s')
+docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
+	run_featurecounts.sh "$hisat2_bam_dir" "$quants" "$gtf" "$cpu"
 
-	hisat2_index_exit_code=$?
-	et=$(date '+%s')
+fc_ec=$?
+et=$(date '+%s')
 
-	if [[ $hisat2_index_exit_code -eq 0 ]]; then
-		print_log "[${pink}hisat2-index-build${nc}] HISAT2 Index building ${green}successful${nc}. Runtime: $((et - st)) s"
-	else
-		print_log "[${pink}hisat2-index-build${nc}] HISAT2 Index building ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
-	fi
-
-	# hisat2 alignment, SAM to BAM conversion, filtering out unaligned reads, sorting BAM files, and merging BAM files of the same sample
-	hisat2_bam_dir=${out_dir}/hisat2_alignment_bams
-	mkdir -p $hisat2_bam_dir
-
-	st=$(date '+%s')
-
-	docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
-		run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$cpu" "$logfile"
-
-	et=$(date '+%s')
-	hisat2_alignment_ec=$?
-
-	if [[ "$hisat2_alignment_ec" -eq 0 ]]; then
-		print_log "[${pink}hisat2-alignment${nc}] HISAT2 Alignment ${green}successful${nc}. Runtime: $((et - st)) s"
-	else
-		print_log "[${pink}hisat2-alignment${nc}] HISAT2 Alignment ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
-	fi
-
-	# BAM file quantification using featureCounts tool
-	quants=${out_dir}/quants_data
-	mkdir -p "$quants"
-
-	st=$(date '+%s')
-	docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
-		run_featurecounts.sh "$hisat2_bam_dir" "$quants" "$gtf" "$cpu"
-
-	fc_ec=$?
-	et=$(date '+%s')
-
-	if [[ "$fc_ec" -eq 0 ]]; then
-                print_log "[${pink}featureCounts${nc}] Quantification of BAM files ${green}successful${nc}. Runtime: $((et - st)) s"
-        else
-                print_log "[${pink}featureCounts${nc}] Quantification of BAM files ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
-        fi
-
+if [[ "$fc_ec" -eq 0 ]]; then
+	print_log "[${pink}featureCounts${nc}] Quantification of BAM files ${green}successful${nc}. Runtime: $((et - st)) s"
+else
+	print_log "[${pink}featureCounts${nc}] Quantification of BAM files ${red}unsuccessful${nc}. Runtime: $((et - st)) s"
 fi

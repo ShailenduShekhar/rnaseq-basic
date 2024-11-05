@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 in_dir=$1
-out_dir=$2
+fastp_out=$2
 cpu=$3
 logfile=$4
 
@@ -16,8 +16,6 @@ print_log() {
 }
 
 print_log "Running FASTP with $cpu threads ..."
-fastp_out=${out_dir}/fastp_results
-mkdir -p $fastp_out
 
 for r1 in $in_dir/*R1.fastq.gz; do
 	st=$(date '+%s')
@@ -26,11 +24,11 @@ for r1 in $in_dir/*R1.fastq.gz; do
 	out_prefix=${fastp_out}/$(basename $r1 | sed 's/_R1.fastq.gz//')
 
 	fastp \
-		-i $r1 \
-		-I $r2 \
+		-i "$r1" \
+		-I "$r2" \
 		-o ${out_prefix}_trimmed_R1.fastq.gz \
 		-O ${out_prefix}_trimmed_R2.fastq.gz \
-		-w $cpu \
+		-w "$cpu" \
 		-h ${out_prefix}_report.html \
 		-j ${out_prefix}_report.json > ${out_prefix}_fastp_stdout.txt 2>&1
 
