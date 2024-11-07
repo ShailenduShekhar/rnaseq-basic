@@ -21,12 +21,12 @@ USAGE:
 
 	-i (*): Input directory containing FASTQ files in the format - *R1/2.fastq.gz
 	-o (*): Output directory which would contain all the outputs produced by the analysis pipeline
-	-x    : HISAT2 index (if provided skips the HISAT2 index building step) (Mutually exclusive with 'r')
 	-q    : Disables FASTQC and MultiQC (default: disabled)
+	-f    : Enables FASTP (default: disabled)
+	-x    : HISAT2 index (if provided skips the HISAT2 index building step) (Mutually exclusive with 'r')
 	-r    : Reference FASTA sequence (*.fa or *.fasta) (Mutually exclusive with 'x')
 	-g (*): GTF file (Enables annotation of the HISAT2 Index)
 	-a    : Use GTF file while HISAT2 index building
-	-f    : Enables FASTP (default: disabled)
 	-l (*): Log file
 	"""
 }
