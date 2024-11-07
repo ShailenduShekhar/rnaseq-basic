@@ -12,7 +12,7 @@ highlight=$(get_color.py pink)
 nc=$(get_color.py nc)
 
 print_log() {
-        echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2-alignment${nc}] $1 | tee -a $logfile
+        echo -e [$(date '+%D %H:%M:%S')] [${highlight}hisat2-alignment${nc}] "$1" | tee -a "$logfile"
 }
 
 

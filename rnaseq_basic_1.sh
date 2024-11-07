@@ -1,10 +1,6 @@
 #!/usr/bin/bash
 
 
-# options that cannot be changed at execution time
-cpu=$(nproc)
-ram_factor=54
-
 # defining the colors
 red=$(docker run --rm rnaseq-basic:1 get_color.py red)
 blue=$(docker run --rm rnaseq-basic:1 get_color.py blue)
@@ -12,7 +8,6 @@ green=$(docker run --rm rnaseq-basic:1 get_color.py green)
 bror=$(docker run --rm rnaseq-basic:1 get_color.py brown-orange)
 pink=$(docker run --rm rnaseq-basic:1 get_color.py pink)
 nc=$(docker run --rm rnaseq-basic:1 get_color.py nc)
-
 
 get_color() {
 	echo $(docker run --rm rnaseq-basic:1 get_color.py $1)
@@ -26,10 +21,11 @@ USAGE:
 
 	-i (*): Input directory containing FASTQ files in the format - *R1/2.fastq.gz
 	-o (*): Output directory which would contain all the outputs produced by the analysis pipeline
-	-x    : HISAT2 index (if provided skips the HISAT2 index building step) (Mutually exclusive with 'g')
-	-q    : Disables FASTQC and MultiQC (default: enabled)
-	-r (*): Reference FASTA sequence (*.fa or *.fasta)
-	-g    : GTF file (Enables annotation of the HISAT2 Index) (Mutually exclusive with 'x')
+	-x    : HISAT2 index (if provided skips the HISAT2 index building step) (Mutually exclusive with 'r')
+	-q    : Disables FASTQC and MultiQC (default: disabled)
+	-r    : Reference FASTA sequence (*.fa or *.fasta) (Mutually exclusive with 'x')
+	-g (*): GTF file (Enables annotation of the HISAT2 Index)
+	-a    : Use GTF file while HISAT2 index building
 	-f    : Enables FASTP (default: disabled)
 	-l (*): Log file
 	"""
@@ -45,7 +41,7 @@ print_error() {
 
 check_null_dir_exists() {
 	if [[ -z $1 ]]; then
-                print_error "A required parameter ${red}"$2"${nc} found empty.Check help with '-h'."
+                print_error "A required parameter ${red}"$2"${nc} found empty. Check help with '-h'."
                 exit 1
         fi
 	if [[ ! -d $1 ]]; then
@@ -57,7 +53,7 @@ check_null_dir_exists() {
 
 check_null_file_exists() {
 	if [[ -z $1 ]]; then
-                print_error "A required parameter ${red}"$2"${nc} found empty.Check help with '-h'."
+                print_error "A required parameter ${red}"$2"${nc} found empty. Check help with '-h'."
                 exit 1
         fi
 	if [[ ! -f $1 ]]; then
@@ -69,7 +65,7 @@ check_null_file_exists() {
 
 check_null_value() {
 	if [[ -z $1 ]]; then
-		print_error "A required parameter ${red}"$2"${nc} found empty.Check help with '-h'."
+		print_error "A required parameter ${red}"$2"${nc} found empty. Check help with '-h'."
 		exit 1
 	fi
 	print_log "${blue}${3}${nc} : ${1}"
@@ -117,21 +113,20 @@ run_fastp() {
 	fastp_out=${out_dir}/fastp_results
         mkdir -p "$fastp_out"
 
-        docker run --rm -v "$in_dir":"$in_dir" -v "$fastp_out":"$fastp_out" rnaseq-basic:1 \
+        docker run --rm -v "$in_dir":"$in_dir" -v "$fastp_out":"$fastp_out" ${logfile_mount} rnaseq-basic:1 \
                 run_fastp.sh "$in_dir" "$fastp_out" "$cpu" "$logfile"
 
         in_dir="$fastp_out"
 }
 
 annotate() {
-	gtf_input_dir=$(realpath $(dirname $gtf))
         exon_ss_outdir=${out_dir}/annotation_files
         mkdir -p $exon_ss_outdir
 
         ss=${exon_ss_outdir}/hisat2_splice_sites.txt
         exon=${exon_ss_outdir}/hisat2_exons.txt
 
-        docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$exon_ss_outdir":"$exon_ss_outdir" \
+        docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$exon_ss_outdir":"$exon_ss_outdir" ${logfile_mount} \
                 rnaseq-basic:1 run_annotation_gtf.sh "$gtf" "$ss" "$exon" "$logfile"
         annot_params="--ss ${ss} --exon ${exon}"
 }
@@ -168,7 +163,7 @@ build_split_index() {
 
 	st=$(date '+%s')
 
-	docker run --rm -v "$out_dir":"$out_dir" rnaseq-basic:1 \
+	docker run --rm -v "$out_dir":"$out_dir" ${logfile_mount} rnaseq-basic:1 \
 		run_hisat2_build.sh "$split_out" "$hisat2_index_dir" "$annot_params" "$logfile"
 
 	hisat2_index_exit_code=$?
@@ -181,7 +176,6 @@ build_split_index() {
 	fi
 }
 
-
 if [[ $# -eq 0 ]]; then
 	echo -e "No arguments detected.\nTerminating the pipeline."
 	help
@@ -189,10 +183,15 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # setting the default options
-q=true
+q=false
 f=false
+a=false
 
-while getopts "hi:o:fr:g:ql:x:" option; do
+# fixed variables
+cpu=$(nproc)
+ram_factor=54
+
+while getopts "hi:o:fr:g:aqx:l:" option; do
 	case $option in
 		i)
 		in_dir=$(realpath $OPTARG)
@@ -203,7 +202,7 @@ while getopts "hi:o:fr:g:ql:x:" option; do
 		;;
 
 		q)
-		q=false
+		q=true
 		;;
 		
 		f)
@@ -218,12 +217,16 @@ while getopts "hi:o:fr:g:ql:x:" option; do
 		gtf=$(realpath $OPTARG)
 		;;
 
-		l)
-		logfile=$(realpath $OPTARG)
+		a)
+		a=true
 		;;
 
 		x)
 		index=$(realpath $OPTARG)
+		;;
+
+		l)
+		logfile=$(realpath $OPTARG)
 		;;
 
 		h) help
@@ -237,28 +240,38 @@ while getopts "hi:o:fr:g:ql:x:" option; do
 done
 
 # checking arguments
-check_null_dir_exists "$in_dir" "-i" "Input Directory"
 check_null_value "$out_dir" "-o" "Output Directory"
-check_null_file_exists "$ref" "-r" "Reference"
-check_fasta_file "$ref"
-check_null_value "$logfile" "-l" "Log file"
+check_null_dir_exists "$in_dir" "-i" "Input Directory"
 
-[[ ! -z "$gtf" && ! -z "$index" ]] && {
-	print_error "Options 'g' and 'x' are mutually exclusive. Terminating the pipeline."
-	exit 1
+check_null_file_exists "$gtf" "-g" "GTF"
+gtf_input_dir=$(realpath $(dirname $gtf))
+
+check_null_value "$logfile" "-l" "Logfile"
+
+[[ $? -eq 0 ]] && {
+	logfile_dir=$(realpath $(dirname $logfile))
+	logfile_mount="-v $logfile_dir:$logfile_dir"
 }
 
-[[ ! -z "$gtf" ]] && {
-	check_null_file_exists "$gtf" "-g" "GTF"
-	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
-} || print_log "Annotation for HISAT2 index building ${red}disabled${nc}"
-
 [[ ! -z "$index" ]] && {
+	[[ ! -z "$ref" || "$a" == true ]] && {
+		print_error "Options 'r' and 'a' are mutually exclusive to 'x'. Terminating the pipeline"
+		exit 1
+	}
 	check_null_dir_exists "$index" "-x" "Index"
 	print_log "HISAT2 Index building stage will be skipped."
 	hisat2_index_dir="$index"
-	index_mount="-v $index:$index"
+	index_mount="-v ${index}:${index}"
 }
+
+[[ ! -z "$ref" ]] && {
+	check_null_file_exists "$ref" "-r" "Reference"
+	check_fasta_file "$ref"
+}
+
+[[ "$a" == true ]] && {
+	print_log "Annotation for HISAT2 index building ${green}enabled${nc}"
+} || print_log "Annotation for HISAT2 index building ${red}disabled${nc}"
 
 [[ $q == true ]] && print_log "QC${green} enabled${nc}" || print_log "QC${red} disabled${nc}"
 
@@ -271,7 +284,7 @@ check_null_value "$logfile" "-l" "Log file"
 [[ $f == true ]] && run_fastp
 
 # extracting exons and splice sites, if needed
-[[ ! -z $gtf ]] && annotate
+[[ $a == true ]] && annotate
 
 # Splitting the reference sequence, if needed
 [[ -z $index ]] && {
@@ -315,11 +328,11 @@ mkdir -p $hisat2_bam_dir
 
 st=$(date '+%s')
 
-docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" ${index_mount} rnaseq-basic:1 \
+docker run --rm -v "$in_dir":"$in_dir" -v "$out_dir":"$out_dir" ${index_mount} ${logfile_mount} rnaseq-basic:1 \
 	run_hisat2_alignment.sh "$in_dir" "$hisat2_bam_dir" "$hisat2_index_dir" "$cpu" "$logfile"
 
-et=$(date '+%s')
 hisat2_alignment_ec=$?
+et=$(date '+%s')
 
 if [[ "$hisat2_alignment_ec" -eq 0 ]]; then
 	print_log "[${pink}hisat2-alignment${nc}] HISAT2 Alignment ${green}successful${nc}. Runtime: $((et - st)) s"
@@ -330,6 +343,8 @@ fi
 # BAM file quantification using featureCounts tool
 quants=${out_dir}/quants_data
 mkdir -p "$quants"
+
+print_log "Using featureCounts to quantify the BAM files ..."
 
 st=$(date '+%s')
 docker run --rm -v "$gtf_input_dir":"$gtf_input_dir" -v "$out_dir":"$out_dir" rnaseq-basic:1 \
