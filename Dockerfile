@@ -53,4 +53,4 @@ COPY ./scripts/ /scripts/
 
 ENV PATH=${PATH}:/py-mod/bin:/apps/:/apps/FastQC/:/apps/hisat2-2.2.1/:/apps/subread-2.0.2-Linux-x86_64/bin:/scripts/:/apps/samtools-1.21/bin
 ENV PYTHONPATH=/py-mod/lib/python3.12/site-packages/
-ENV TZ="Asia/Kolkata"
+ENV TZ=TIMEZONE
