@@ -6,13 +6,13 @@ Currently, it is designed towards low resource environments so as to facilitate 
 An Ubuntu OS and docker is all that is needed to set up this pipeline.
 To install the tool, you simply have to clone the GitHub repository and build the docker image using the following commands.
 ```
-1. git clone git@github.com:ShailenduShekhar/rnaseq-basic.git
-2. cd rnaseq-basic
-3. ./set_up.sh
+git clone git@github.com:ShailenduShekhar/rnaseq-basic.git
+cd rnaseq-basic
+./set_up.sh
 ```
 The rnaseq-basic:1 pipeline is now ready to use. The following command would print the “help” options to the STDOUT.
 ```
-1. ./rnaseq_basic_1.sh -h
+./rnaseq_basic_1.sh -h
 ```
 ## Tool Overview
 This pipeline incorporates the following steps of a classic RNASeq analysis:
