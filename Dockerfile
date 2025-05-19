@@ -1,5 +1,8 @@
 FROM ubuntu:24.04 AS base_image
 
+LABEL image.author.name "Shailendu Shekhar Mohapatra"
+LABEL image.author.email "shailendumohapatra@gmail.com"
+
 RUN apt-get update \
 	&& apt-get upgrade -y \
 	&& apt-get install -y \
